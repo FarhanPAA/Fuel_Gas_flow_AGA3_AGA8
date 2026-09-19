@@ -30,7 +30,8 @@ def calculate(
     z_f_manual = 0.99,                  # Manual entry for gas compressibility at flowing condition
     z_b_manual = 0.995,                 # Manual entry of gas compressibility at base condition
     molar_mass_manual = 16.83,          # Manual entry of molar mass at g/mol
-    k_manual =1.3                       # Manual entry of isentropic expansion coefficient 
+    k_manual =1.3,                      # Manual entry of isentropic expansion coefficient
+    return_diagnostics = False          # Return structured AGA3 results instead of the legacy tuple
 ):
     if p_unit == 'bar':
         p = p/PSI_TO_BAR
@@ -69,4 +70,13 @@ def calculate(
     
     result = aga3_calculate(p=p_u,t=t,d_p=d_p, p_atm=p_atm , p_b=p_b ,d_p_unit=d_p_unit, t_b=t_base,  d0=d0, D0=D0, d0_tb = d0_tb, D0_tb = D0_tb, alpha_d = alpha_d, alpha_D = alpha_D ,Z_f=z_f,Z_b=z_b, M_gas=molar_mass, k=k, mu=mu, length_unit=length_unit)
     
+    if return_diagnostics:
+        return {
+            **result,
+            'z_f': z_f,
+            'z_b': z_b,
+            'k': k,
+            'molar_mass': molar_mass,
+        }
+
     return result['volumetric_flow'], z_f, z_b, k, molar_mass

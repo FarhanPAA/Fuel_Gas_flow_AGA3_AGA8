@@ -5,6 +5,12 @@ PSI_TO_BAR = 0.06894757293178308
 INWC_TO_MBAR = 1000.0 * PSI_TO_BAR / 27.7070
 R=0.0831451                 # ideal gas constant (bar, kg, m, K)
 
+AGA3_BETA_MIN = 0.10
+AGA3_BETA_MAX = 0.75
+AGA3_MIN_ORIFICE_BORE_MM = 11.4  # 0.45 inch, rounded as stated in AGA3 Part 1
+AGA3_MIN_PIPE_REYNOLDS = 4000.0
+AGA3_MAX_DP_PRESSURE_RATIO = 0.20
+
 def flange_tap_cd_constants(D: float, N: float, beta: float):
     """
     Calculate the five AGA-3 discharge-coefficient constants (Cd0 … Cd4)
@@ -55,7 +61,10 @@ def flange_tap_cd(cd_all, F_l, tol = 5e-6, max_iter = 10):
 
   Cd = Cd0
 
-  for _ in range(max_iter):
+  converged = False
+  iterations = 0
+
+  for iterations in range(1, max_iter + 1):
       # Step 2 – dimensionless flow parameter X ------------------------------
       X = F_l / Cd
 
@@ -90,11 +99,13 @@ def flange_tap_cd(cd_all, F_l, tol = 5e-6, max_iter = 10):
       Cd -= delta_Cd
 
       if abs(delta_Cd) < tol:
+          converged = True
           break
 
-  Cd_f = (F_l / Cd) > 1.0  # True → X > 1 → Re < 4 000
+  X = F_l / Cd
+  Cd_f = X > 1.0  # True → X > 1 → Re < 4,000
 
-  return Cd, Cd_f
+  return Cd, Cd_f, converged, iterations, X
 
 def aga3_calculate(
     p,                           # in psig
@@ -158,8 +169,8 @@ def aga3_calculate(
 
   E_v = 1/(1-beta**4)**(1/2)
 
+  x = d_p/(p_u*1000) # d_p in mbar and p_u in bar
   if k>0:
-    x = d_p/(p_u*1000) # d_p in mbar
     Y_p = (0.41+0.35*beta**4)/k
     Y = 1-Y_p*x
   else:
@@ -174,19 +185,63 @@ def aga3_calculate(
     F_l = 1000
 
   Cd_all = flange_tap_cd_constants(D, 25.4, beta)
-  Cd, Cd_f = flange_tap_cd(Cd_all, F_l)
+  Cd, Cd_f, cd_converged, cd_iterations, X = flange_tap_cd(Cd_all, F_l)
   F_mass = (3.1415926/4)*0.03600*E_v*d**2
   qm= F_mass*Cd*Y*F_lp
   qb = F_mass*Cd*Y*F_lp/rho_b
 
   qb_MMSCFD = qb*35.3147*24/10**6 # Converted to MMSCFD Unit
 
+  pipe_reynolds_number = 4000.0 / X
+  applicability_flags = {
+      'beta_ratio_out_of_range': not (AGA3_BETA_MIN <= beta <= AGA3_BETA_MAX),
+      'orifice_bore_below_minimum': not (d > AGA3_MIN_ORIFICE_BORE_MM),
+      'pipe_reynolds_number_below_minimum': pipe_reynolds_number < AGA3_MIN_PIPE_REYNOLDS,
+      'differential_pressure_ratio_out_of_range': not (0.0 < x < AGA3_MAX_DP_PRESSURE_RATIO),
+      'coefficient_of_discharge_low_reynolds': Cd_f,
+      'coefficient_of_discharge_not_converged': not cd_converged,
+  }
+  applicability_messages = []
+  if applicability_flags['beta_ratio_out_of_range']:
+      applicability_messages.append(
+          f"Beta ratio {beta:.6g} is outside the AGA3 range "
+          f"{AGA3_BETA_MIN:.2f} to {AGA3_BETA_MAX:.2f}."
+      )
+  if applicability_flags['orifice_bore_below_minimum']:
+      applicability_messages.append(
+          f"Flowing orifice bore {d:.6g} mm must be greater than "
+          f"{AGA3_MIN_ORIFICE_BORE_MM:.1f} mm (0.45 inch)."
+      )
+  if applicability_flags['pipe_reynolds_number_below_minimum']:
+      applicability_messages.append(
+          f"Pipe Reynolds number {pipe_reynolds_number:.6g} is below 4,000; "
+          "the coefficient of discharge is outside its supported range."
+      )
+  if applicability_flags['differential_pressure_ratio_out_of_range']:
+      applicability_messages.append(
+          f"Differential-pressure ratio x={x:.6g} must be greater than 0 and less than 0.20."
+      )
+  if applicability_flags['coefficient_of_discharge_not_converged']:
+      applicability_messages.append(
+          f"Coefficient-of-discharge iteration did not converge within {cd_iterations} iterations."
+      )
+
   dict = {
       'volumetric_flow': qb_MMSCFD,
       'beta': beta,
       'velocity_of_approach_ev': E_v,
       'fluid_expansion_factor_y': Y,
-      'coefficient_of_discharge_cd': Cd
+      'coefficient_of_discharge_cd': Cd,
+      'coefficient_of_discharge_low_reynolds_flag': Cd_f,
+      'coefficient_of_discharge_converged': cd_converged,
+      'coefficient_of_discharge_iterations': cd_iterations,
+      'pipe_reynolds_number': pipe_reynolds_number,
+      'differential_pressure_ratio': x,
+      'flowing_orifice_bore_mm': d,
+      'flowing_meter_tube_diameter_mm': D,
+      'applicability_flags': applicability_flags,
+      'applicability_messages': applicability_messages,
+      'within_aga3_applicability': not any(applicability_flags.values()),
   }
 
   return dict

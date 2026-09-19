@@ -125,12 +125,12 @@ with st.form("main_form", clear_on_submit=False):
             orifice_dia = st.number_input(
                 f"Enter orifice diameter in {length_unit}",
                 step=STEP, format=FMT,
-                help="Bore diameter at flowing temperature."
+                help="Bore diameter at the orifice reference temperature entered below."
             )
             pipe_dia = st.number_input(
                 f"Enter pipe diameter in {length_unit}",
                 step=STEP, format=FMT,
-                help="Pipe ID at flowing temperature."
+                help="Meter-tube internal diameter at the pipe reference temperature entered below."
             )
             orifice_ref_temp = st.number_input(
                 f"Enter reference temperature for orifice diameter in degree {temperature_unit}",
@@ -278,8 +278,11 @@ with st.form("main_form", clear_on_submit=False):
                 errors.append("Pipe diameter must be greater than orifice diameter (β < 1).")
             else:
                 beta_for_warning = orifice_dia / pipe_dia
-                if not (0.10 < beta_for_warning < 0.75):
-                    st.warning(f"β ratio is {beta_for_warning:.4f}. Typical AGA-3 range is 0.10–0.75. Verify sizes.")
+                if not (0.10 <= beta_for_warning <= 0.75):
+                    st.warning(
+                        f"Preliminary β ratio is {beta_for_warning:.4f}. "
+                        "The AGA3 range is 0.10–0.75; the final check uses thermally corrected diameters."
+                    )
 
         # thermal expansion coefficients
         if orifice_exp_coeff <= 0:
@@ -327,24 +330,32 @@ with st.form("main_form", clear_on_submit=False):
         try:
             with st.spinner("Computing AGA-3 flow ..."):
                 if gas_properties_given:
-                    gas_flow, z_f, z_b, k, molar_mass = calculate(
+                    calculation_result = calculate(
                         p=flow_pressure, t=flow_temperature, d_p=differential_pressure, p_atm=atm_pressure,
                         p_unit=pressure_unit, p_b=base_pressure, d_p_unit=dp_unit, t_unit=t_unit, t_base=base_temp,
                         pressure_tap=pressure_tap, length_unit=length_unit, d0=orifice_dia, D0=pipe_dia,
                         d0_tb=orifice_ref_temp, D0_tb=pipe_ref_temp, alpha_d=orifice_exp_coeff, alpha_D=pipe_exp_coeff,
                         z_f_manual=z_f_manual, z_b_manual=z_b_manual, molar_mass_manual=molar_mass_manual,
-                        k_manual=k_manual, gas_properties_given=True, mu=mu
+                        k_manual=k_manual, gas_properties_given=True, mu=mu,
+                        return_diagnostics=True
                     )
                 else:
-                    gas_flow, z_f, z_b, k, molar_mass = calculate(
+                    calculation_result = calculate(
                         p=flow_pressure, t=flow_temperature, d_p=differential_pressure, p_atm=atm_pressure,
                         p_unit=pressure_unit, p_b=base_pressure, d_p_unit=dp_unit, t_unit=t_unit, t_base=base_temp,
                         pressure_tap=pressure_tap, length_unit=length_unit, d0=orifice_dia, D0=pipe_dia,
                         d0_tb=orifice_ref_temp, D0_tb=pipe_ref_temp, alpha_d=orifice_exp_coeff, alpha_D=pipe_exp_coeff,
                         N2=N2, CO2=CO2, C1=C1, C2=C2, C3=C3, iC4=iC4, nC4=nC4, iC5=iC5, nC5=nC5,
                         nC6=nC6, nC7=nC7, nC8=nC8, nC9=nC9, nC10=nC10, H2=H2, O2=O2, CO=CO, H2O=H2O,
-                        H2S=H2S, He=He, Ar=Ar, mu=mu, gas_properties_given=False
+                        H2S=H2S, He=He, Ar=Ar, mu=mu, gas_properties_given=False,
+                        return_diagnostics=True
                     )
+
+            gas_flow = calculation_result['volumetric_flow']
+            z_f = calculation_result['z_f']
+            z_b = calculation_result['z_b']
+            k = calculation_result['k']
+            molar_mass = calculation_result['molar_mass']
                     
             # ---------- RESULTS ----------
             FT3_PER_M3 = 35.3147
@@ -374,6 +385,42 @@ with st.form("main_form", clear_on_submit=False):
                         st.metric("k (isentropic exp.)", f"{k:.6f}")
                     with r3c2:
                         st.metric("Molar mass", f"{molar_mass:.5f} g/mol")
+
+                if calculation_result['within_aga3_applicability']:
+                    st.success("AGA3 applicability checks passed for the calculated operating point.")
+                else:
+                    st.warning("Result is outside one or more AGA3 applicability limits:")
+                    for message in calculation_result['applicability_messages']:
+                        st.write(f"• {message}")
+
+                with st.expander("AGA3 calculation diagnostics"):
+                    st.write(f"β ratio: {calculation_result['beta']:.6f}")
+                    st.write(f"Pipe Reynolds number: {calculation_result['pipe_reynolds_number']:,.0f}")
+                    st.write(
+                        "Differential-pressure ratio "
+                        f"x: {calculation_result['differential_pressure_ratio']:.6f}"
+                    )
+                    st.write(
+                        "Flowing orifice bore: "
+                        f"{calculation_result['flowing_orifice_bore_mm']:.6f} mm"
+                    )
+                    st.write(
+                        "Flowing meter-tube diameter: "
+                        f"{calculation_result['flowing_meter_tube_diameter_mm']:.6f} mm"
+                    )
+                    st.write(
+                        "Discharge coefficient: "
+                        f"{calculation_result['coefficient_of_discharge_cd']:.8f}"
+                    )
+                    st.write(
+                        "Discharge-coefficient iteration: "
+                        f"{calculation_result['coefficient_of_discharge_iterations']} iteration(s), "
+                        f"{'converged' if calculation_result['coefficient_of_discharge_converged'] else 'not converged'}"
+                    )
+                    st.caption(
+                        "The AGA3 nominal pipe-size requirement cannot be verified from internal diameter alone. "
+                        "Confirm that the installation is nominal 2-inch Schedule 160 or larger."
+                    )
 
 
         except Exception as e:
