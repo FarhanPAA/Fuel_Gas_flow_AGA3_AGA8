@@ -1,7 +1,8 @@
 import math
 
 PSI_TO_BAR = 0.06894757293178308
-INWC_TO_MBAR = 2.490889
+# AGA3 Part 4 Table 4-5: N3 = 27.7070 inH2O at 60 degF per psi.
+INWC_TO_MBAR = 1000.0 * PSI_TO_BAR / 27.7070
 R=0.0831451                 # ideal gas constant (bar, kg, m, K)
 
 def flange_tap_cd_constants(D: float, N: float, beta: float):
