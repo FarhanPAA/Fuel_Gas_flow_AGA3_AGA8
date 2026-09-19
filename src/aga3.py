@@ -11,6 +11,11 @@ AGA3_MIN_ORIFICE_BORE_MM = 11.4  # 0.45 inch, rounded as stated in AGA3 Part 1
 AGA3_MIN_PIPE_REYNOLDS = 4000.0
 AGA3_MAX_DP_PRESSURE_RATIO = 0.20
 
+
+class AGA3ConvergenceError(RuntimeError):
+    """Raised when the AGA3 discharge-coefficient iteration is invalid or fails to converge."""
+
+
 def flange_tap_cd_constants(D: float, N: float, beta: float):
     """
     Calculate the five AGA-3 discharge-coefficient constants (Cd0 … Cd4)
@@ -52,17 +57,27 @@ def flange_tap_cd_constants(D: float, N: float, beta: float):
 
     return (Cd0, Cd1, Cd2, Cd3, Cd4)
 
-def flange_tap_cd(cd_all, F_l, tol = 5e-6, max_iter = 10):
+def flange_tap_cd(cd_all, F_l, tol=5e-6, max_iter=50):
   XC = 1.142139337256165
   A  = 4.343524261523267
   B  = 3.764387693320165
 
+  if not math.isfinite(F_l) or F_l <= 0.0:
+      raise AGA3ConvergenceError(
+          f"Iteration flow factor must be finite and positive; received {F_l!r}."
+      )
+  if not math.isfinite(tol) or tol <= 0.0:
+      raise ValueError("Convergence tolerance must be finite and positive.")
+  if not isinstance(max_iter, int) or max_iter < 1:
+      raise ValueError("Maximum iteration count must be a positive integer.")
+
   Cd0, Cd1, Cd2, Cd3, Cd4 = cd_all
 
   Cd = Cd0
-
-  converged = False
-  iterations = 0
+  if not math.isfinite(Cd) or Cd <= 0.0:
+      raise AGA3ConvergenceError(
+          f"Initial discharge coefficient must be finite and positive; received {Cd!r}."
+      )
 
   for iterations in range(1, max_iter + 1):
       # Step 2 – dimensionless flow parameter X ------------------------------
@@ -95,17 +110,30 @@ def flange_tap_cd(cd_all, F_l, tol = 5e-6, max_iter = 10):
           )
 
       # Step 4 – Newton update (4‑44) ---------------------------------------
-      delta_Cd = (Cd - Fc) / (1.0 + Dc / Cd)
-      Cd -= delta_Cd
+      denominator = 1.0 + Dc / Cd
+      if not all(math.isfinite(value) for value in (X, Fc, Dc, denominator)) or denominator == 0.0:
+          raise AGA3ConvergenceError(
+              f"Discharge-coefficient iteration produced an invalid intermediate value "
+              f"at iteration {iterations}."
+          )
+
+      delta_Cd = (Cd - Fc) / denominator
+      next_Cd = Cd - delta_Cd
+      if not math.isfinite(next_Cd) or next_Cd <= 0.0:
+          raise AGA3ConvergenceError(
+              f"Discharge coefficient became invalid at iteration {iterations}: {next_Cd!r}."
+          )
+      Cd = next_Cd
 
       if abs(delta_Cd) < tol:
-          converged = True
-          break
+          X = F_l / Cd
+          Cd_f = X > 1.0  # True → X > 1 → Re < 4,000
+          return Cd, Cd_f, True, iterations, X
 
-  X = F_l / Cd
-  Cd_f = X > 1.0  # True → X > 1 → Re < 4,000
-
-  return Cd, Cd_f, converged, iterations, X
+  raise AGA3ConvergenceError(
+      f"Discharge coefficient did not converge to |delta Cd| < {tol:g} "
+      f"within {max_iter} iterations; last |delta Cd| was {abs(delta_Cd):.6g}."
+  )
 
 def aga3_calculate(
     p,                           # in psig

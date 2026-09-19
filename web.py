@@ -1,5 +1,6 @@
 import streamlit as st
 from calculation import calculate
+from src.aga3 import AGA3ConvergenceError
 
 # ---------- Page setup (no emoji icon) ----------
 st.set_page_config(page_title="AGA3 Fuel Gas Calculator", layout="wide")
@@ -423,6 +424,9 @@ with st.form("main_form", clear_on_submit=False):
                     )
 
 
+        except AGA3ConvergenceError as e:
+            st.error(f"AGA3 calculation stopped: {e}")
+            st.info("No flow result was produced. Check the inputs and operating range.")
         except Exception as e:
             st.exception(e)
             st.error("Calculation failed. Re-check unit selections, ranges, and consistency of inputs.")

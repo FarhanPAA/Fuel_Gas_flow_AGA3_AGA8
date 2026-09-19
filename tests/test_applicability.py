@@ -1,6 +1,7 @@
 import unittest
 
 from calculation import calculate
+from src.aga3 import AGA3ConvergenceError, flange_tap_cd, flange_tap_cd_constants
 
 
 def manual_example_1(**overrides):
@@ -64,6 +65,16 @@ class Aga3ApplicabilityTests(unittest.TestCase):
         result = manual_example_1(d_p=6000.0, return_diagnostics=True)
 
         self.assertTrue(result["applicability_flags"]["differential_pressure_ratio_out_of_range"])
+
+    def test_iteration_limit_raises_instead_of_returning_partial_result(self):
+        constants = flange_tap_cd_constants(D=102.246, N=25.4, beta=0.496921)
+
+        with self.assertRaisesRegex(AGA3ConvergenceError, "did not converge"):
+            flange_tap_cd(constants, F_l=0.00486252, max_iter=1)
+
+    def test_invalid_discharge_coefficient_is_rejected(self):
+        with self.assertRaisesRegex(AGA3ConvergenceError, "finite and positive"):
+            flange_tap_cd((0.0, 0.0, 0.0, 0.0, 0.0), F_l=0.01)
 
 
 if __name__ == "__main__":
