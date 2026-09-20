@@ -62,10 +62,19 @@ with st.container(border=True):
         gas_properties_method = st.selectbox(
             label="Enter Gas Properties Calculation Method",
             options=["AGA8", "Manual"],
-            help="AGA8: derive Z and k from composition. Manual: enter Z_f, Z_b, k, and molar mass."
+            help="AGA8 derives gas properties from composition. Manual mode accepts either Z with molar mass or direct densities."
         )
-    # keep logic the same
     gas_properties_given = (gas_properties_method == "Manual")
+    with col2:
+        if gas_properties_given:
+            manual_property_method = st.selectbox(
+                label="Select manual gas-property basis",
+                options=["Compressibility and molar mass", "Flowing and base densities"],
+                help="Choose one basis only. Direct density mode does not use Z or molar mass."
+            )
+            manual_property_basis = (
+                "density" if manual_property_method == "Flowing and base densities" else "z_molar_mass"
+            )
 
 # ---------- FORM ----------
 with st.form("main_form", clear_on_submit=False):
@@ -178,19 +187,33 @@ with st.form("main_form", clear_on_submit=False):
                     step=STEP, format=FMT,
                     help="Often ~1.20–1.35 for natural gas."
                 )
-                z_f_manual = st.number_input(
-                    "Compressibility factor at flowing (Z_f)",
-                    step=STEP, format=FMT
-                )
+                if manual_property_basis == "z_molar_mass":
+                    z_f_manual = st.number_input(
+                        "Compressibility factor at flowing (Z_f)",
+                        step=STEP, format=FMT
+                    )
+                else:
+                    rho_f_manual = st.number_input(
+                        "Flowing gas density (kg/m³)",
+                        step=STEP, format=FMT,
+                        help="Gas density at the flowing pressure and temperature."
+                    )
             with col2:
-                z_b_manual = st.number_input(
-                    "Compressibility factor at base (Z_b)",
-                    step=STEP, format=FMT
-                )
-                molar_mass_manual = st.number_input(
-                    "Molar mass of gas (g/mol)",
-                    step=STEP, format=FMT
-                )
+                if manual_property_basis == "z_molar_mass":
+                    z_b_manual = st.number_input(
+                        "Compressibility factor at base (Z_b)",
+                        step=STEP, format=FMT
+                    )
+                    molar_mass_manual = st.number_input(
+                        "Molar mass of gas (g/mol)",
+                        step=STEP, format=FMT
+                    )
+                else:
+                    rho_b_manual = st.number_input(
+                        "Base gas density (kg/m³)",
+                        step=STEP, format=FMT,
+                        help="Gas density at the selected base pressure and temperature."
+                    )
     else:
         with st.container(border=True):
             st.markdown("### Enter Gas Composition in percentage")
@@ -310,12 +333,18 @@ with st.form("main_form", clear_on_submit=False):
         if gas_properties_given:
             if k_manual <= 1.0 or k_manual > 2.0:
                 st.warning("Isentropic exponent k is usually ~1.20–1.35 for natural gas. Your value is unusual.")
-            if not (0 < z_f_manual <= 2):
-                errors.append("Compressibility factor at flowing must be between 0 and 2 (non-zero).")
-            if not (0 < z_b_manual <= 2):
-                errors.append("Compressibility factor at base must be between 0 and 2 (non-zero).")
-            if molar_mass_manual <= 0:
-                errors.append("Molar mass must be > 0 g/mol.")
+            if manual_property_basis == "z_molar_mass":
+                if not (0 < z_f_manual <= 2):
+                    errors.append("Compressibility factor at flowing must be between 0 and 2 (non-zero).")
+                if not (0 < z_b_manual <= 2):
+                    errors.append("Compressibility factor at base must be between 0 and 2 (non-zero).")
+                if molar_mass_manual <= 0:
+                    errors.append("Molar mass must be > 0 g/mol.")
+            else:
+                if rho_f_manual <= 0:
+                    errors.append("Flowing gas density must be > 0 kg/m³.")
+                if rho_b_manual <= 0:
+                    errors.append("Base gas density must be > 0 kg/m³.")
         else:
             # enforce composition sum (blocks calc)
             if abs(total_pct - 100.0) > 1e-3:
@@ -331,14 +360,28 @@ with st.form("main_form", clear_on_submit=False):
         try:
             with st.spinner("Computing AGA-3 flow ..."):
                 if gas_properties_given:
+                    manual_inputs = {
+                        "manual_property_basis": manual_property_basis,
+                        "k_manual": k_manual,
+                    }
+                    if manual_property_basis == "z_molar_mass":
+                        manual_inputs.update({
+                            "z_f_manual": z_f_manual,
+                            "z_b_manual": z_b_manual,
+                            "molar_mass_manual": molar_mass_manual,
+                        })
+                    else:
+                        manual_inputs.update({
+                            "rho_f_manual": rho_f_manual,
+                            "rho_b_manual": rho_b_manual,
+                        })
+
                     calculation_result = calculate(
                         p=flow_pressure, t=flow_temperature, d_p=differential_pressure, p_atm=atm_pressure,
                         p_unit=pressure_unit, p_b=base_pressure, d_p_unit=dp_unit, t_unit=t_unit, t_base=base_temp,
                         pressure_tap=pressure_tap, length_unit=length_unit, d0=orifice_dia, D0=pipe_dia,
                         d0_tb=orifice_ref_temp, D0_tb=pipe_ref_temp, alpha_d=orifice_exp_coeff, alpha_D=pipe_exp_coeff,
-                        z_f_manual=z_f_manual, z_b_manual=z_b_manual, molar_mass_manual=molar_mass_manual,
-                        k_manual=k_manual, gas_properties_given=True, mu=mu,
-                        return_diagnostics=True
+                        gas_properties_given=True, mu=mu, return_diagnostics=True, **manual_inputs
                     )
                 else:
                     calculation_result = calculate(
@@ -408,6 +451,14 @@ with st.form("main_form", clear_on_submit=False):
                     st.write(
                         "Flowing meter-tube diameter: "
                         f"{calculation_result['flowing_meter_tube_diameter_mm']:.6f} mm"
+                    )
+                    st.write(
+                        "Flowing gas density: "
+                        f"{calculation_result['flowing_density_kg_m3']:.6f} kg/m³"
+                    )
+                    st.write(
+                        "Base gas density: "
+                        f"{calculation_result['base_density_kg_m3']:.6f} kg/m³"
                     )
                     st.write(
                         "Discharge coefficient: "

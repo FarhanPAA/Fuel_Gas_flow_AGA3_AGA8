@@ -46,9 +46,11 @@ Unspecified components default to **0**:
 
 ### Manual Override for Gas Properties
 
-- `gas_properties_given` *(bool, default `False`)* — If **True**, bypass AGA8 and use manual values.
-- `z_f_manual`, `z_b_manual` *(float)* — Compressibility at flowing/base.
-- `molar_mass_manual` *(float, g/mol)* — Mixture molar mass.
+- `gas_properties_given` *(bool, default `False`)* — If **True**, bypass AGA8 and use the basis selected by `manual_property_basis`.
+- `manual_property_basis` *('z_molar_mass' | 'density')* — Select one mutually exclusive manual basis. The default preserves the existing Z-and-molar-mass behavior.
+- `z_f_manual`, `z_b_manual` *(float)* — Compressibility at flowing/base when `manual_property_basis = 'z_molar_mass'`.
+- `molar_mass_manual` *(float, g/mol)* — Mixture molar mass when `manual_property_basis = 'z_molar_mass'`.
+- `rho_f_manual`, `rho_b_manual` *(float, kg/m³)* — Flowing and base density when `manual_property_basis = 'density'`; both values are required and Z/molar mass are not used.
 - `k_manual` *(float)* — Isentropic exponent (`k = C_p/C_v`).
 
 ---
@@ -58,10 +60,12 @@ Unspecified components default to **0**:
 Returns a **5-tuple**:
 
 1. `volumetric_flow` — Base-condition flow rate (unit per your `aga3_calculate` implementation).
-2. `z_f` — Compressibility at **flowing** conditions.
-3. `z_b` — Compressibility at **base** conditions.
+2. `z_f` — Compressibility at **flowing** conditions, or `None` with the direct-density basis.
+3. `z_b` — Compressibility at **base** conditions, or `None` with the direct-density basis.
 4. `k` — Isentropic exponent at **flowing** conditions.
-5. `molar_mass` — Mixture **g/mol**.
+5. `molar_mass` — Mixture **g/mol**, or `None` with the direct-density basis.
+
+With `return_diagnostics = True`, the result also includes `flowing_density_kg_m3`, `base_density_kg_m3`, and `density_source` for every property basis.
 
 ---
 
@@ -87,8 +91,7 @@ This documentation and any associated calculations are provided **as-is** for en
 
 ## Streamlit Demo App
 
-A minimal **Streamlit** UI has been built **on top of this `calculate(...)` function** to help test inputs and visualize results.  
-You can wire your fields (pressure/temperature/DP/geometry/composition) to the function and display the returned tuple.
+A minimal **Streamlit** UI has been built **on top of this `calculate(...)` function** to help test inputs and visualize results. You can wire your fields (pressure/temperature/DP/geometry/composition) to the function and display the returned tuple.
 
 **Live demo:** [aga3calculation.streamlit.app](https://aga3calculation.streamlit.app/)
 
@@ -100,6 +103,7 @@ You can wire your fields (pressure/temperature/DP/geometry/composition) to the f
 ```bash
 pip install -r requirements.txt  # ensure streamlit and dependencies are installed
 streamlit run web.py             # app.py calls calculate(...) under the hood
+```
 
 ## Minimal Usage Sketch (Python)
 
@@ -114,8 +118,14 @@ vol_flow, zf, zb, k, M = calculate(
     mu=...,
     # Option A: auto AGA8 from composition
     N2=..., CO2=..., C1=..., C2=..., C3=..., iC4=..., nC4=...,  # etc.
-    gas_properties_given=False
-    # Option B: manual properties
+    gas_properties_given=False,
+    # Option B: manual Z and molar mass
     # gas_properties_given=True,
+    # manual_property_basis='z_molar_mass',
     # z_f_manual=..., z_b_manual=..., molar_mass_manual=..., k_manual=...
+    # Option C: manual flowing and base densities
+    # gas_properties_given=True,
+    # manual_property_basis='density',
+    # rho_f_manual=..., rho_b_manual=..., k_manual=...
 )
+```

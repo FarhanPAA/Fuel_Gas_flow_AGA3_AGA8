@@ -57,6 +57,40 @@ class Aga3ApplicabilityTests(unittest.TestCase):
 
         self.assertTrue(result["applicability_flags"]["differential_pressure_ratio_out_of_range"])
 
+    def test_direct_density_basis_matches_equivalent_z_and_molar_mass(self):
+        derived = nominal_manual_gas_case(return_diagnostics=True)
+        direct = nominal_manual_gas_case(
+            manual_property_basis="density",
+            rho_f_manual=derived["flowing_density_kg_m3"],
+            rho_b_manual=derived["base_density_kg_m3"],
+            z_f_manual=0.1,
+            z_b_manual=0.1,
+            molar_mass_manual=1.0,
+            return_diagnostics=True,
+        )
+
+        self.assertEqual(direct["density_source"], "manual_density")
+        self.assertEqual(direct["manual_property_basis"], "density")
+        self.assertIsNone(direct["z_f"])
+        self.assertIsNone(direct["z_b"])
+        self.assertIsNone(direct["molar_mass"])
+        self.assertAlmostEqual(direct["volumetric_flow"], derived["volumetric_flow"], places=12)
+
+    def test_direct_density_basis_requires_both_positive_densities(self):
+        with self.assertRaisesRegex(ValueError, "Flowing and base density"):
+            nominal_manual_gas_case(
+                manual_property_basis="density",
+                rho_f_manual=10.0,
+                rho_b_manual=None,
+            )
+
+        with self.assertRaisesRegex(ValueError, "finite and positive"):
+            nominal_manual_gas_case(
+                manual_property_basis="density",
+                rho_f_manual=10.0,
+                rho_b_manual=0.0,
+            )
+
     def test_iteration_limit_raises_instead_of_returning_partial_result(self):
         constants = flange_tap_cd_constants(D=102.246, N=25.4, beta=0.496921)
 

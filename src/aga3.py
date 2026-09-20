@@ -154,7 +154,9 @@ def aga3_calculate(
     alpha_D,                     # temp coeff of pipe in degree celcius
     k,                           # isentropic exponent
     mu,                          # viscosity in cP
-    length_unit                  # "mm", "in"
+    length_unit,                 # "mm", "in"
+    rho_f_manual=None,           # optional flowing density in kg/m3
+    rho_b_manual=None            # optional base density in kg/m3
 ):       
   '''
   The Formulas are implemented assuming pressure to be in absolute bar, temperature in Kelvin,
@@ -187,9 +189,20 @@ def aga3_calculate(
   else:
     print("Length Unit not recognized")
 
-  # Density at flowing condition (kg/m3)
-  rho_f = (p_u*M_gas)/(Z_f*R*t)
-  rho_b = (p_b*M_gas)/(Z_b*R*t_b)
+  density_values = (rho_f_manual, rho_b_manual)
+  if any(value is not None for value in density_values):
+    if not all(value is not None for value in density_values):
+      raise ValueError("Flowing and base density must be provided together.")
+    if not all(math.isfinite(value) and value > 0.0 for value in density_values):
+      raise ValueError("Flowing and base density must be finite and positive.")
+    rho_f = rho_f_manual
+    rho_b = rho_b_manual
+    density_source = "manual_density"
+  else:
+    # Density derived from compressibility and molar mass (kg/m3)
+    rho_f = (p_u*M_gas)/(Z_f*R*t)
+    rho_b = (p_b*M_gas)/(Z_b*R*t_b)
+    density_source = "z_and_molar_mass"
 
   d = d0*(1+alpha_d*(t-d0_tb))
   D = D0*(1+alpha_D*(t-D0_tb))
@@ -267,6 +280,9 @@ def aga3_calculate(
       'differential_pressure_ratio': x,
       'flowing_orifice_bore_mm': d,
       'flowing_meter_tube_diameter_mm': D,
+      'flowing_density_kg_m3': rho_f,
+      'base_density_kg_m3': rho_b,
+      'density_source': density_source,
       'applicability_flags': applicability_flags,
       'applicability_messages': applicability_messages,
       'within_aga3_applicability': not any(applicability_flags.values()),
