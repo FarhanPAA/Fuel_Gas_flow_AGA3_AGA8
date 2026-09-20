@@ -5,9 +5,6 @@ from typing import Any
 
 from calculation import calculate
 
-
-MMSCFD_TO_M3_PER_HOUR = 1_000_000.0 / (35.3147 * 24.0)
-
 TOLERANCES_PPM = {
     "base_volume_flow_m3_h": 50.0,
     "mass_flow_kg_per_hour": 50.0,
@@ -263,7 +260,7 @@ def evaluate_standard_cases() -> list[StandardCaseResult]:
         diagnostics = calculate(**case.inputs)
         calculated = {
             "base_volume_flow_m3_h": (
-                diagnostics["volumetric_flow"] * MMSCFD_TO_M3_PER_HOUR
+                diagnostics["base_volume_flow_m3_per_hour"]
             ),
             "mass_flow_kg_per_hour": diagnostics["mass_flow_kg_per_hour"],
             "flowing_orifice_bore_mm": diagnostics["flowing_orifice_bore_mm"],

@@ -44,6 +44,8 @@ Unspecified components default to **0**:
 
 `N2, CO2, C1, C2, C3, iC4, nC4, iC5, nC5, nC6, nC7, nC8, nC9, nC10, H2, O2, CO, H2O, H2S, He, Ar`
 
+Every composition value must be finite and nonnegative. The total must be within ±0.001 mol% of 100 mol%; otherwise the AGA8 calculation raises `ValueError` before property evaluation.
+
 ### Manual Override for Gas Properties
 
 - `gas_properties_given` *(bool, default `False`)* — If **True**, bypass AGA8 and use the basis selected by `manual_property_basis`.
@@ -63,13 +65,13 @@ AGA8 is loaded only when `gas_properties_given = False`. Both manual-property ba
 
 Returns a **5-tuple**:
 
-1. `volumetric_flow` — Base-condition flow rate (unit per your `aga3_calculate` implementation).
+1. `volumetric_flow` — Base-condition flow rate in MMSCF/D. This legacy name is retained for backward compatibility.
 2. `z_f` — Compressibility at **flowing** conditions, or `None` with the direct-density basis.
 3. `z_b` — Compressibility at **base** conditions, or `None` with the direct-density basis.
 4. `k` — Isentropic exponent at **flowing** conditions.
 5. `molar_mass` — Mixture **g/mol**, or `None` with the direct-density basis.
 
-With `return_diagnostics = True`, the result also includes `mass_flow_kg_per_hour`, `flowing_density_kg_m3`, `base_density_kg_m3`, and `density_source` for every property basis. The legacy 5-tuple is unchanged.
+With `return_diagnostics = True`, the result also includes `base_volume_flow_mmscfd`, `base_volume_flow_m3_per_hour`, `mass_flow_kg_per_hour`, `flowing_density_kg_m3`, `base_density_kg_m3`, and `density_source` for every property basis. `volumetric_flow` remains an alias of `base_volume_flow_mmscfd`, and the legacy 5-tuple is unchanged.
 
 ---
 

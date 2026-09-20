@@ -9,6 +9,7 @@
 # - Gas compositions are in percent and should sum to ~100.
 
 from calculation import calculate
+from src.constants import MILLIMETRES_PER_INCH
 
 def print_result(title, result_tuple):
     q, zf, zb, k, mm = result_tuple
@@ -116,7 +117,8 @@ r4 = calculate(
     t_base=60.0,        # °F
     pressure_tap="Upstream",
     length_unit="in",
-    d0=247.768/25.4, D0=387.535/25.4,   # inches
+    d0=247.768/MILLIMETRES_PER_INCH,
+    D0=387.535/MILLIMETRES_PER_INCH,   # inches
     d0_tb=68.0, D0_tb=68.0,             # °F reference temps
     # Pass alpha per-°F here (alpha_C * 5/9). Function multiplies by 9/5 to get per-°C.
     alpha_d=8.89e-6 * (5.0/9.0),

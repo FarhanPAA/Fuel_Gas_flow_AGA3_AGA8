@@ -1,6 +1,12 @@
 import streamlit as st
 from calculation import calculate
 from src.aga3 import AGA3ConvergenceError
+from src.constants import (
+    ABSOLUTE_ZERO_CELSIUS,
+    ABSOLUTE_ZERO_FAHRENHEIT,
+    AGA8_COMPOSITION_TOLERANCE_MOL_PERCENT,
+    AGA8_COMPOSITION_TOTAL_MOL_PERCENT,
+)
 
 # ---------- Page setup (no emoji icon) ----------
 st.set_page_config(page_title="AGA3 Fuel Gas Calculator", layout="wide")
@@ -261,7 +267,10 @@ with st.form("main_form", clear_on_submit=False):
             )
             st.caption(f"Composition total: {total_pct:.6f} %")
 
-            if abs(total_pct - 100.0) > 1e-3:
+            if (
+                abs(total_pct - AGA8_COMPOSITION_TOTAL_MOL_PERCENT)
+                > AGA8_COMPOSITION_TOLERANCE_MOL_PERCENT
+            ):
                 st.error("Composition should sum to 100%. Adjust the inputs.")
 
     # ----- Submit -----
@@ -272,7 +281,11 @@ with st.form("main_form", clear_on_submit=False):
         errors = []
 
         # absolute zero per selected unit
-        abs_zero = -459.67 if t_unit == "F" else -273.15
+        abs_zero = (
+            ABSOLUTE_ZERO_FAHRENHEIT
+            if t_unit == "F"
+            else ABSOLUTE_ZERO_CELSIUS
+        )
         temp_fields = [
             ("Flow temperature", flow_temperature),
             ("Base temperature", base_temp),
@@ -347,7 +360,10 @@ with st.form("main_form", clear_on_submit=False):
                     errors.append("Base gas density must be > 0 kg/m³.")
         else:
             # enforce composition sum (blocks calc)
-            if abs(total_pct - 100.0) > 1e-3:
+            if (
+                abs(total_pct - AGA8_COMPOSITION_TOTAL_MOL_PERCENT)
+                > AGA8_COMPOSITION_TOLERANCE_MOL_PERCENT
+            ):
                 errors.append("Composition must sum to 100.000%. Adjust the inputs.")
 
         if errors:
@@ -395,16 +411,14 @@ with st.form("main_form", clear_on_submit=False):
                         return_diagnostics=True
                     )
 
-            gas_flow = calculation_result['volumetric_flow']
+            gas_flow = calculation_result['base_volume_flow_mmscfd']
+            m3_per_hour = calculation_result['base_volume_flow_m3_per_hour']
             z_f = calculation_result['z_f']
             z_b = calculation_result['z_b']
             k = calculation_result['k']
             molar_mass = calculation_result['molar_mass']
                     
             # ---------- RESULTS ----------
-            FT3_PER_M3 = 35.3147
-            m3_per_hour = gas_flow * 1_000_000 / (FT3_PER_M3 * 24)  # MMSCF/D → m³/h
-
             with st.container(border=True):
                 st.subheader("Results")
 

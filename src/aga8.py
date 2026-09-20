@@ -1,6 +1,42 @@
+import math
+
 import pvtlib
 
-PSI_TO_BAR = 0.06894757293178308
+from src.constants import (
+    AGA8_COMPOSITION_TOLERANCE_MOL_PERCENT,
+    AGA8_COMPOSITION_TOTAL_MOL_PERCENT,
+    PSI_TO_BAR,
+)
+
+
+def validate_composition(composition):
+    """Validate AGA8 component values expressed in mol percent."""
+    for component, value in composition.items():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(
+                f"Gas composition component {component} must be a finite number; "
+                f"received {value!r}."
+            )
+        if value < 0.0:
+            raise ValueError(
+                f"Gas composition component {component} must be nonnegative; "
+                f"received {value!r}."
+            )
+
+    total = math.fsum(composition.values())
+    if (
+        abs(total - AGA8_COMPOSITION_TOTAL_MOL_PERCENT)
+        > AGA8_COMPOSITION_TOLERANCE_MOL_PERCENT
+    ):
+        raise ValueError(
+            "Gas composition must total 100 mol% within +/-0.001 mol%; "
+            f"received {total:.9g} mol%."
+        )
+    return total
 
 def calculate_gas_properties(
     p_psig,         # Upstream Pressure in PSIG
@@ -26,6 +62,7 @@ def calculate_gas_properties(
         'H2O': H2O, 'H2S': H2S,
         'He': He, 'Ar': Ar,
     }
+    validate_composition(composition)
     calculator = pvtlib.AGA8('DETAIL')
     
     gas_properties_flow = calculator.calculate_from_PT(

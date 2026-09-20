@@ -1,9 +1,12 @@
 import math
 
 from src.aga3 import aga3_calculate
-PSI_TO_BAR = 0.06894757293178308
-# AGA3 Part 4 Table 4-5: N3 = 27.7070 inH2O at 60 degF per psi.
-INWC_TO_MBAR = 1000.0 * PSI_TO_BAR / 27.7070
+from src.constants import (
+    ABSOLUTE_ZERO_CELSIUS,
+    ABSOLUTE_ZERO_FAHRENHEIT,
+    INWC_TO_MBAR,
+    PSI_TO_BAR,
+)
 
 
 def _require_choice(name, value, allowed):
@@ -25,7 +28,9 @@ def _require_positive(name, value):
 
 def _validate_temperature(name, value, unit):
     _require_finite(name, value)
-    absolute_zero = -273.15 if unit == "C" else -459.67
+    absolute_zero = (
+        ABSOLUTE_ZERO_CELSIUS if unit == "C" else ABSOLUTE_ZERO_FAHRENHEIT
+    )
     if value <= absolute_zero:
         raise ValueError(
             f"{name} must be above absolute zero ({absolute_zero} deg{unit}); "

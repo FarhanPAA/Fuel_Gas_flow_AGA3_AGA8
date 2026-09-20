@@ -6,6 +6,7 @@ from unittest.mock import patch
 import calculation as calculation_module
 from calculation import calculate
 from src.aga3 import AGA3ConvergenceError, flange_tap_cd, flange_tap_cd_constants
+from src.constants import M3_PER_HOUR_TO_MMSCFD
 
 
 def nominal_manual_gas_inputs(**overrides):
@@ -102,6 +103,34 @@ class Aga3ApplicabilityTests(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 with self.assertRaisesRegex(ValueError, message):
                     nominal_manual_gas_case(**overrides)
+
+    def test_invalid_aga8_compositions_are_rejected_before_calculation(self):
+        invalid_compositions = (
+            ({"C1": 101.0, "N2": -1.0}, "N2.*nonnegative"),
+            ({"C1": float("nan")}, "C1.*finite"),
+            ({"C1": 99.0}, "must total 100 mol%"),
+        )
+        for composition, message in invalid_compositions:
+            with self.subTest(composition=composition):
+                with self.assertRaisesRegex(ValueError, message):
+                    nominal_manual_gas_case(
+                        gas_properties_given=False,
+                        **composition,
+                    )
+
+    def test_structured_flow_units_are_explicit_and_legacy_alias_is_preserved(self):
+        result = nominal_manual_gas_case(return_diagnostics=True)
+
+        self.assertEqual(
+            result["volumetric_flow"],
+            result["base_volume_flow_mmscfd"],
+        )
+        self.assertGreater(result["base_volume_flow_m3_per_hour"], 0.0)
+        self.assertAlmostEqual(
+            result["base_volume_flow_m3_per_hour"] * M3_PER_HOUR_TO_MMSCFD,
+            result["base_volume_flow_mmscfd"],
+            places=12,
+        )
 
     def test_legacy_result_shape_is_preserved(self):
         self.assertEqual(len(nominal_manual_gas_case()), 5)

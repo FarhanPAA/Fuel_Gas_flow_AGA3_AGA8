@@ -1,9 +1,13 @@
 import math
 
-PSI_TO_BAR = 0.06894757293178308
-# AGA3 Part 4 Table 4-5: N3 = 27.7070 inH2O at 60 degF per psi.
-INWC_TO_MBAR = 1000.0 * PSI_TO_BAR / 27.7070
-R=0.0831451                 # ideal gas constant (bar, kg, m, K)
+from src.constants import (
+    CELSIUS_TO_KELVIN_OFFSET,
+    INWC_TO_MBAR,
+    M3_PER_HOUR_TO_MMSCFD,
+    MILLIMETRES_PER_INCH,
+    PSI_TO_BAR,
+    UNIVERSAL_GAS_CONSTANT_BAR_M3_PER_KMOL_K,
+)
 
 AGA3_BETA_MIN = 0.10
 AGA3_BETA_MAX = 0.75
@@ -222,17 +226,17 @@ def aga3_calculate(
 
   p_u = p
 
-  t = t+273.15
-  t_b = t_b+273.15
-  d0_tb = d0_tb+273.15
-  D0_tb = D0_tb+273.15
+  t = t+CELSIUS_TO_KELVIN_OFFSET
+  t_b = t_b+CELSIUS_TO_KELVIN_OFFSET
+  d0_tb = d0_tb+CELSIUS_TO_KELVIN_OFFSET
+  D0_tb = D0_tb+CELSIUS_TO_KELVIN_OFFSET
 
   if min(t, t_b, d0_tb, D0_tb) <= 0.0:
     raise ValueError("All temperatures must be above absolute zero.")
 
   if length_unit == "in":
-    d0 = d0*25.4
-    D0 = D0*25.4
+    d0 = d0*MILLIMETRES_PER_INCH
+    D0 = D0*MILLIMETRES_PER_INCH
   elif length_unit == "mm":
     d0 = d0
     D0 = D0
@@ -254,8 +258,8 @@ def aga3_calculate(
     _require_positive("Z_b", Z_b)
     _require_positive("M_gas", M_gas)
     # Density derived from compressibility and molar mass (kg/m3)
-    rho_f = (p_u*M_gas)/(Z_f*R*t)
-    rho_b = (p_b*M_gas)/(Z_b*R*t_b)
+    rho_f = (p_u*M_gas)/(Z_f*UNIVERSAL_GAS_CONSTANT_BAR_M3_PER_KMOL_K*t)
+    rho_b = (p_b*M_gas)/(Z_b*UNIVERSAL_GAS_CONSTANT_BAR_M3_PER_KMOL_K*t_b)
     density_source = "z_and_molar_mass"
 
   d = d0*(1+alpha_d*(t-d0_tb))
@@ -290,13 +294,13 @@ def aga3_calculate(
   else:
     F_l = 1000
 
-  Cd_all = flange_tap_cd_constants(D, 25.4, beta)
+  Cd_all = flange_tap_cd_constants(D, MILLIMETRES_PER_INCH, beta)
   Cd, Cd_f, cd_converged, cd_iterations, X = flange_tap_cd(Cd_all, F_l)
   F_mass = (3.1415926/4)*0.03600*E_v*d**2
   qm= F_mass*Cd*Y*F_lp
   qb = F_mass*Cd*Y*F_lp/rho_b
 
-  qb_MMSCFD = qb*35.3147*24/10**6 # Converted to MMSCFD Unit
+  qb_MMSCFD = qb*M3_PER_HOUR_TO_MMSCFD
 
   pipe_reynolds_number = 4000.0 / X
   applicability_flags = {
@@ -334,6 +338,8 @@ def aga3_calculate(
 
   dict = {
       'volumetric_flow': qb_MMSCFD,
+      'base_volume_flow_mmscfd': qb_MMSCFD,
+      'base_volume_flow_m3_per_hour': qb,
       'mass_flow_kg_per_hour': qm,
       'beta': beta,
       'velocity_of_approach_ev': E_v,
