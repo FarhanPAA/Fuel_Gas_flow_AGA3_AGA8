@@ -35,8 +35,8 @@ Python Version Used: 3.13.6
 - `length_unit` *('mm' | 'in')* — Length unit for diameters.
 - `d0`, `D0` *(float)* — **Orifice** & **pipe** diameters at their reference temperatures (`d0_tb`, `D0_tb`, in `t_unit`).
 - `d0_tb`, `D0_tb` *(float)* — **Reference temperatures** (match `t_unit`) for `d0`, `D0`.
-- `alpha_d`, `alpha_D` *(float)* — **Linear thermal expansion coefficients** (1/°C).
-- `mu` *(float)* — **Gas viscosity** at flowing conditions (**Pa·s** recommended).
+- `alpha_d`, `alpha_D` *(float)* — **Linear thermal expansion coefficients** in inverse degrees matching `t_unit`: use 1/°C with `t_unit = 'C'` and 1/°F with `t_unit = 'F'`. Fahrenheit coefficients are converted internally to 1/°C.
+- `mu` *(float)* — **Dynamic gas viscosity** at flowing conditions in **centipoise (cP)**.
 
 ### Gas Composition (mol %)
 
