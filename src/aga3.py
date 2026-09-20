@@ -269,6 +269,7 @@ def aga3_calculate(
 
   dict = {
       'volumetric_flow': qb_MMSCFD,
+      'mass_flow_kg_per_hour': qm,
       'beta': beta,
       'velocity_of_approach_ev': E_v,
       'fluid_expansion_factor_y': Y,

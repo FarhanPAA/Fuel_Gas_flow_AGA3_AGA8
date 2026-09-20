@@ -65,7 +65,32 @@ Returns a **5-tuple**:
 4. `k` — Isentropic exponent at **flowing** conditions.
 5. `molar_mass` — Mixture **g/mol**, or `None` with the direct-density basis.
 
-With `return_diagnostics = True`, the result also includes `flowing_density_kg_m3`, `base_density_kg_m3`, and `density_source` for every property basis.
+With `return_diagnostics = True`, the result also includes `mass_flow_kg_per_hour`, `flowing_density_kg_m3`, `base_density_kg_m3`, and `density_source` for every property basis. The legacy 5-tuple is unchanged.
+
+---
+
+## AGA3 Part 4 §4.3.4 Standard Verification
+
+Run all six published calculation cases with:
+
+```bash
+python standard_tests.py
+```
+
+The verifier enters the PDF's published flowing and base densities directly through `manual_property_basis = 'density'`. AGA8 is intentionally excluded so the checks isolate the current AGA3 implementation from equation-of-state or composition-property differences. The script checks mass flow and base volume flow to 50 ppm; flowing orifice diameter to 25 ppm; velocity-of-approach factor, expansion factor, and discharge coefficient to 50 ppm; and flowing density to 100 ppm. It exits with a nonzero status if any requirement fails.
+
+| Case | Published volume (m³/h) | Calculated volume (m³/h) | Volume error (ppm) | Published mass (kg/h) | Calculated mass (kg/h) | Mass error (ppm) | Status |
+|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 1 | 20.485660 | 20.485676 | 0.822 | 20465.377200 | 20465.395613 | 0.900 | PASS |
+| 2 | 11.918736 | 11.918752 | 1.374 | 10855.944000 | 10855.957226 | 1.218 | PASS |
+| 3 | 4462.977600 | 4462.981638 | 0.905 | 8306.985600 | 8306.992353 | 0.813 | PASS |
+| 4 | 4.311824 | 4.311827 | 0.704 | 8.025642 | 8.025648 | 0.689 | PASS |
+| 5 | 58.494996 | 58.495037 | 0.695 | 108.877320 | 108.877397 | 0.704 | PASS |
+| 6 | 1.497322 | 1.497324 | 1.111 | 1363.806000 | 1363.807713 | 1.256 | PASS |
+
+Current result: all six cases pass. The maximum observed base-volume-flow deviation is 1.374 ppm (approximately 1.4 ppm), against the 50 ppm limit.
+
+Cases 1, 2, and 6 are incompressible test cases. Some cases intentionally exercise conditions outside normal fuel-gas orifice-meter applicability; they remain valid algorithm-verification cases and may produce applicability warnings in normal use.
 
 ---
 
