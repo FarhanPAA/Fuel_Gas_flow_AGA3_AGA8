@@ -1,11 +1,15 @@
+import builtins
+import importlib
 import unittest
+from unittest.mock import patch
 
+import calculation as calculation_module
 from calculation import calculate
 from src.aga3 import AGA3ConvergenceError, flange_tap_cd, flange_tap_cd_constants
 
 
-def nominal_manual_gas_case(**overrides):
-    """Return a synthetic, in-range gas case for diagnostic behavior tests."""
+def nominal_manual_gas_inputs(**overrides):
+    """Return inputs for a synthetic, in-range gas case."""
     inputs = {
         "p": 450.0,
         "t": 30.0,
@@ -32,10 +36,73 @@ def nominal_manual_gas_case(**overrides):
         "k_manual": 1.30,
     }
     inputs.update(overrides)
-    return calculate(**inputs)
+    return inputs
+
+
+def nominal_manual_gas_case(**overrides):
+    """Calculate a synthetic, in-range gas case for diagnostic behavior tests."""
+    return calculate(**nominal_manual_gas_inputs(**overrides))
 
 
 class Aga3ApplicabilityTests(unittest.TestCase):
+    def test_manual_modes_do_not_import_aga8(self):
+        real_import = builtins.__import__
+
+        def reject_aga8(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "src.aga8":
+                raise AssertionError("manual property modes must not import AGA8")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=reject_aga8):
+            reloaded = importlib.reload(calculation_module)
+            z_result = reloaded.calculate(
+                **nominal_manual_gas_inputs(return_diagnostics=True)
+            )
+            density_result = reloaded.calculate(
+                **nominal_manual_gas_inputs(
+                    manual_property_basis="density",
+                    rho_f_manual=35.0,
+                    rho_b_manual=0.75,
+                    return_diagnostics=True,
+                )
+            )
+
+        self.assertEqual(z_result["manual_property_basis"], "z_molar_mass")
+        self.assertEqual(density_result["manual_property_basis"], "density")
+
+    def test_invalid_enumerated_inputs_are_rejected(self):
+        invalid_inputs = (
+            ({"p_unit": "kPa"}, "p_unit"),
+            ({"d_p_unit": "Pa"}, "d_p_unit"),
+            ({"t_unit": "K"}, "t_unit"),
+            ({"pressure_tap": "Middle"}, "pressure_tap"),
+            ({"length_unit": "cm"}, "length_unit"),
+            ({"manual_property_basis": "both"}, "manual_property_basis"),
+        )
+        for overrides, message in invalid_inputs:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(ValueError, message):
+                    nominal_manual_gas_case(**overrides)
+
+    def test_nonphysical_inputs_are_rejected(self):
+        invalid_inputs = (
+            ({"d_p": 0.0}, "d_p"),
+            ({"d0": 0.0}, "d0"),
+            ({"d0": 400.0}, "smaller than D0"),
+            ({"mu": 0.0}, "mu"),
+            ({"p_atm": 0.0}, "p_atm"),
+            ({"p_b": 0.0}, "p_b"),
+            ({"t": -273.15}, "absolute zero"),
+            ({"p": -20.0}, "absolute pressure"),
+            ({"alpha_d": float("nan")}, "alpha_d"),
+            ({"z_f_manual": 0.0}, "z_f_manual"),
+            ({"k_manual": 0.0}, "k_manual"),
+        )
+        for overrides, message in invalid_inputs:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(ValueError, message):
+                    nominal_manual_gas_case(**overrides)
+
     def test_legacy_result_shape_is_preserved(self):
         self.assertEqual(len(nominal_manual_gas_case()), 5)
 
@@ -84,7 +151,7 @@ class Aga3ApplicabilityTests(unittest.TestCase):
                 rho_b_manual=None,
             )
 
-        with self.assertRaisesRegex(ValueError, "finite and positive"):
+        with self.assertRaisesRegex(ValueError, "rho_b_manual"):
             nominal_manual_gas_case(
                 manual_property_basis="density",
                 rho_f_manual=10.0,

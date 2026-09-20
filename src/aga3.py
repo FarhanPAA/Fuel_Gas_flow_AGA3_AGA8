@@ -16,6 +16,17 @@ class AGA3ConvergenceError(RuntimeError):
     """Raised when the AGA3 discharge-coefficient iteration is invalid or fails to converge."""
 
 
+def _require_finite(name, value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number; received {value!r}.")
+
+
+def _require_positive(name, value):
+    _require_finite(name, value)
+    if value <= 0.0:
+        raise ValueError(f"{name} must be greater than zero; received {value!r}.")
+
+
 def flange_tap_cd_constants(D: float, N: float, beta: float):
     """
     Calculate the five AGA-3 discharge-coefficient constants (Cd0 … Cd4)
@@ -163,6 +174,44 @@ def aga3_calculate(
   differential pressure in mbar and density in kg/m3. So units are first converted.
   Different Unit Constants are used to handle unit mismatch
   '''  
+  if d_p_unit not in ("mbar", "inwc"):
+    raise ValueError(
+        f"d_p_unit must be 'mbar' or 'inwc'; received {d_p_unit!r}."
+    )
+  if length_unit not in ("mm", "in"):
+    raise ValueError(
+        f"length_unit must be 'mm' or 'in'; received {length_unit!r}."
+    )
+
+  for name, value in (
+      ("p", p),
+      ("t", t),
+      ("p_atm", p_atm),
+      ("p_b", p_b),
+      ("t_b", t_b),
+      ("d0_tb", d0_tb),
+      ("D0_tb", D0_tb),
+      ("alpha_d", alpha_d),
+      ("alpha_D", alpha_D),
+      ("k", k),
+  ):
+    _require_finite(name, value)
+  for name, value in (
+      ("d_p", d_p),
+      ("d0", d0),
+      ("D0", D0),
+      ("p_atm", p_atm),
+      ("p_b", p_b),
+      ("mu", mu),
+  ):
+    _require_positive(name, value)
+  if p + p_atm <= 0.0:
+    raise ValueError("Flowing absolute pressure must be greater than zero.")
+  if k == 0.0:
+    raise ValueError(
+        "k must be positive for a gas or negative for an incompressible standard case."
+    )
+
   p = (p + p_atm)*PSI_TO_BAR
   p_b =  p_b*PSI_TO_BAR
     
@@ -170,8 +219,6 @@ def aga3_calculate(
     d_p = d_p
   elif d_p_unit == "inwc":
     d_p = d_p*INWC_TO_MBAR
-  else:
-    print("Differential Pressure Unit not recognized")
 
   p_u = p
 
@@ -180,25 +227,32 @@ def aga3_calculate(
   d0_tb = d0_tb+273.15
   D0_tb = D0_tb+273.15
 
+  if min(t, t_b, d0_tb, D0_tb) <= 0.0:
+    raise ValueError("All temperatures must be above absolute zero.")
+
   if length_unit == "in":
     d0 = d0*25.4
     D0 = D0*25.4
   elif length_unit == "mm":
     d0 = d0
     D0 = D0
-  else:
-    print("Length Unit not recognized")
+
+  if d0 >= D0:
+    raise ValueError("d0 must be smaller than D0.")
 
   density_values = (rho_f_manual, rho_b_manual)
   if any(value is not None for value in density_values):
     if not all(value is not None for value in density_values):
       raise ValueError("Flowing and base density must be provided together.")
-    if not all(math.isfinite(value) and value > 0.0 for value in density_values):
-      raise ValueError("Flowing and base density must be finite and positive.")
+    _require_positive("rho_f_manual", rho_f_manual)
+    _require_positive("rho_b_manual", rho_b_manual)
     rho_f = rho_f_manual
     rho_b = rho_b_manual
     density_source = "manual_density"
   else:
+    _require_positive("Z_f", Z_f)
+    _require_positive("Z_b", Z_b)
+    _require_positive("M_gas", M_gas)
     # Density derived from compressibility and molar mass (kg/m3)
     rho_f = (p_u*M_gas)/(Z_f*R*t)
     rho_b = (p_b*M_gas)/(Z_b*R*t_b)
@@ -206,6 +260,12 @@ def aga3_calculate(
 
   d = d0*(1+alpha_d*(t-d0_tb))
   D = D0*(1+alpha_D*(t-D0_tb))
+  if not all(math.isfinite(value) and value > 0.0 for value in (d, D)):
+    raise ValueError("Thermally corrected diameters must be finite and positive.")
+  if d >= D:
+    raise ValueError(
+        "Flowing orifice bore must be smaller than the flowing meter-tube diameter."
+    )
   beta = d/D
 
   E_v = 1/(1-beta**4)**(1/2)
@@ -216,6 +276,11 @@ def aga3_calculate(
     Y = 1-Y_p*x
   else:
     Y = 1
+  if not math.isfinite(Y) or Y <= 0.0:
+    raise ValueError(
+        "Expansion factor must be finite and positive; check pressure, differential "
+        "pressure, beta ratio, and isentropic exponent."
+    )
 
   F_le = (4000*0.1*D*mu)/(E_v*Y*d**2)
   F_lp = (2*rho_f*d_p)**(1/2)

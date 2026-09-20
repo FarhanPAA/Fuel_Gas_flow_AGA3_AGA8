@@ -53,6 +53,10 @@ Unspecified components default to **0**:
 - `rho_f_manual`, `rho_b_manual` *(float, kg/m³)* — Flowing and base density when `manual_property_basis = 'density'`; both values are required and Z/molar mass are not used.
 - `k_manual` *(float)* — Isentropic exponent (`k = C_p/C_v`).
 
+Inputs are validated before calculation. Unsupported unit or tap selections, non-finite values, temperatures at or below absolute zero, nonpositive atmospheric/base pressure, DP, geometry, viscosity or property values, and physically impossible absolute-pressure or diameter relationships raise `ValueError` with the affected field identified. A negative `k_manual` remains supported for the incompressible AGA3 standard-verification cases.
+
+AGA8 is loaded only when `gas_properties_given = False`. Both manual-property bases can therefore run without importing the optional AGA8 calculation module.
+
 ---
 
 ## Outputs
