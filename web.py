@@ -51,7 +51,7 @@ with st.container(border=True):
         length_unit = st.selectbox(
             label="Enter length unit",
             options=["mm", "in"],
-            help="Units for orifice and pipe diameters."
+            help="Units for the reference-temperature orifice bore and meter-tube diameters."
         )
 
 # ---------- SECTION: Gas Properties Mode ----------
@@ -120,29 +120,29 @@ with st.form("main_form", clear_on_submit=False):
 
     # ----- Orifice/Pipe geometry -----
     with st.container(border=True):
-        st.markdown("### Enter Orifice and Pipe Information")
+        st.markdown("### Enter Reference Geometry and Thermal Expansion")
         col1, col2 = st.columns(2)
         with col1:
             orifice_dia = st.number_input(
-                f"Enter orifice diameter in {length_unit}",
+                f"Orifice bore diameter at reference temperature ({length_unit})",
                 step=STEP, format=FMT,
-                help="Bore diameter at the orifice reference temperature entered below."
+                help="Enter the measured or certified bore before correction to flowing temperature."
             )
             pipe_dia = st.number_input(
-                f"Enter pipe diameter in {length_unit}",
+                f"Meter-tube internal diameter at reference temperature ({length_unit})",
                 step=STEP, format=FMT,
-                help="Meter-tube internal diameter at the pipe reference temperature entered below."
+                help="Enter the measured or certified tube ID before correction to flowing temperature."
             )
             orifice_ref_temp = st.number_input(
-                f"Enter reference temperature for orifice diameter in degree {temperature_unit}",
+                f"Orifice-bore reference temperature (°{temperature_unit})",
                 step=STEP, format=FMT,
-                help="Temperature at which orifice was measured (manufacturing cert)."
+                help="Temperature at which the entered orifice bore was measured or certified."
             )
         with col2:
             pipe_ref_temp = st.number_input(
-                f"Enter reference temperature for pipe diameter in degree {temperature_unit}",
+                f"Meter-tube diameter reference temperature (°{temperature_unit})",
                 step=STEP, format=FMT,
-                help="Temperature at which pipe ID is specified."
+                help="Temperature at which the entered meter-tube ID was measured or specified."
             )
             orifice_exp_coeff = st.number_input(
                 f"Enter expansion coefficient for orifice per degree {temperature_unit}",
@@ -273,10 +273,10 @@ with st.form("main_form", clear_on_submit=False):
         # diameters and beta
         beta_for_warning = None
         if orifice_dia <= 0 or pipe_dia <= 0:
-            errors.append("Orifice and pipe diameters must be > 0.")
+            errors.append("Reference-temperature orifice and meter-tube diameters must be > 0.")
         else:
             if pipe_dia <= orifice_dia:
-                errors.append("Pipe diameter must be greater than orifice diameter (β < 1).")
+                errors.append("Reference-temperature meter-tube diameter must exceed the orifice bore (β < 1).")
             else:
                 beta_for_warning = orifice_dia / pipe_dia
                 if not (0.10 <= beta_for_warning <= 0.75):
